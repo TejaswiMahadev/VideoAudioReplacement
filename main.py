@@ -15,11 +15,11 @@ import requests
 import json
 
 # Setup Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "c:\\Users\\mahad\\Downloads\\qwiklabs-gcp-00-246c7a6d0bce-421b4a459015.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "path-to-your-json-file"
 
 # Azure OpenAI API setup
-azure_api_key = '22ec84421ec24230a3638d1b51e3a7dc'
-azure_endpoint = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
+azure_api_key = 'API-KEY'
+azure_endpoint = 'ENDPOINT'
 
 # Sidebar navigation
 st.sidebar.markdown(
