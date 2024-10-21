@@ -61,22 +61,35 @@ elif page == "Transcription":
         mono_audio_filename = f"mono_audio_{unique_id}.wav"
         progress = st.progress(0)
         
-        # Download YouTube video using yt-dlp with cookies
-        st.write("Downloading video from YouTube...")
-        progress.progress(10)
+        # Function to list available formats
+        def list_formats(youtube_url):
+            with youtube_dl.YoutubeDL() as ydl:
+                info_dict = ydl.extract_info(youtube_url, download=False)
+                formats = info_dict.get('formats', None)
+                if formats:
+                    st.write("Available formats:")
+                    for f in formats:
+                        st.write(f"Format code: {f['format_id']}, Resolution: {f.get('height')}p, Extension: {f['ext']}, Note: {f.get('format_note')}")
         
-        # Path to the cookie file (update with the actual path)
-        cookie_path = "youtube_cookies.txt"  # Update this path if necessary
+        st.write("Listing available formats for the video...")
+        list_formats(youtube_url)
         
+        # Set download options for the best available video and audio
         ydl_opts = {
-            'format': 'best',
-            'outtmpl': video_filename,  # Set output filename
-            'cookiefile': cookie_path   # Use YouTube cookies for authentication
+            'format': 'bestvideo+bestaudio/best',  # Select best video and audio
+            'outtmpl': video_filename,             # Output filename template
+            'noplaylist': True,                    # Ensure it only downloads a single video
         }
         
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([youtube_url])
-
+        # Download YouTube video using yt-dlp
+        st.write("Downloading video from YouTube...")
+        progress.progress(10)
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+        except youtube_dl.DownloadError as e:
+            st.error(f"Download error: {str(e)}")
+        
         # Extract audio from video
         st.write("Extracting audio...")
         progress.progress(20)
