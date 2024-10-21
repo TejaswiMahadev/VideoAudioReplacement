@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_option_menu import option_menu
 from moviepy.editor import VideoFileClip, AudioFileClip
 from google.cloud import speech
 from google.cloud import texttospeech
@@ -7,9 +8,11 @@ import librosa
 import soundfile as sf
 import tempfile
 import os
+import yt_dlp as youtube_dl
 import uuid
 import wave
 import requests
+import json
 
 # Setup Google Cloud credentials
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "path-to-your-json-file"
@@ -38,29 +41,61 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 st.sidebar.header("NAVIGATION")
-page = st.sidebar.radio("Menu", ["Homepage", "Transcription"])
+with st.sidebar.expander("Menu", expanded=True):
+    page = option_menu(menu_title="Navigation", options=["Homepage", "Transcription"], icons=["house", "person"], menu_icon="cast", default_index=0)
 
 if page == "Homepage":
-    st.title("Welcome to the Video Voice Replacement App")
-    st.write("""This app allows you to upload a video, extract and transcribe the audio, correct transcription errors using AI, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
+    st.title("Welcome to the YouTube Video Voice Replacement App")
+    
+    st.write("""This app allows you to download YouTube videos, extract and transcribe the audio, correct transcription errors using AI, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
 
 elif page == "Transcription":
-    st.title("Video Voice Replacement with AI")
+    st.title("YouTube Video Voice Replacement with AI")
 
-    # Upload video file
-    video_file = st.file_uploader("Upload a video file", type=["mp4", "mkv", "avi"])
-    
-    if video_file:
+    youtube_url = st.text_input("Enter YouTube Video URL")
+
+    if youtube_url:
         unique_id = str(uuid.uuid4())
-        video_filename = f"uploaded_video_{unique_id}.mp4"
+        video_filename = f"downloaded_video_{unique_id}.mp4"
         audio_filename = f"audio_{unique_id}.wav"
         mono_audio_filename = f"mono_audio_{unique_id}.wav"
         progress = st.progress(0)
-
-        # Save uploaded video
-        with open(video_filename, "wb") as f:
-            f.write(video_file.read())
-
+        
+        # Function to list available formats
+        def list_formats(youtube_url):
+            with youtube_dl.YoutubeDL() as ydl:
+                info_dict = ydl.extract_info(youtube_url, download=False)
+                formats = info_dict.get('formats', None)
+                format_list = []
+                if formats:
+                    st.write("Available formats:")
+                    for f in formats:
+                        st.write(f"Format code: {f['format_id']}, Resolution: {f.get('height')}p, Extension: {f['ext']}, Note: {f.get('format_note')}")
+                        format_list.append(f['format_id'])
+                return format_list
+        
+        st.write("Listing available formats for the video...")
+        available_formats = list_formats(youtube_url)
+        
+        # Let the user select a format
+        selected_format = st.selectbox("Select a format to download:", available_formats)
+        
+        # Set download options for the selected format
+        ydl_opts = {
+            'format': selected_format,             # Select the format chosen by the user
+            'outtmpl': video_filename,             # Output filename template
+            'noplaylist': True,                    # Ensure it only downloads a single video
+        }
+        
+        # Download YouTube video using yt-dlp
+        st.write("Downloading video from YouTube...")
+        progress.progress(10)
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+        except youtube_dl.DownloadError as e:
+            st.error(f"Download error: {str(e)}")
+        
         # Extract audio from video
         st.write("Extracting audio...")
         progress.progress(20)
@@ -83,7 +118,7 @@ elif page == "Transcription":
 
         audio_sample_rate = get_audio_sample_rate(mono_audio_filename)
 
-        # Transcribe audio using Google Cloud Speech-to-Text
+        # Transcribe large audio file using long_running_recognize
         def transcribe_long_audio(audio_file):
             client = speech.SpeechClient()
             with open(audio_file, "rb") as f:
@@ -106,7 +141,7 @@ elif page == "Transcription":
                 transcription += result.alternatives[0].transcript + " "
             return transcription
 
-        st.write("Transcribing audio using Google Speech-to-Text...")
+        st.write("Transcribing audio using long-running recognition...")
         progress.progress(50)
         transcription = transcribe_long_audio(mono_audio_filename)
         st.write(f"Transcription: {transcription}")
@@ -141,7 +176,7 @@ elif page == "Transcription":
             client = texttospeech.TextToSpeechClient()
             input_text = texttospeech.SynthesisInput(text=text)
             voice = texttospeech.VoiceSelectionParams(
-                language_code="en-US", name="en-US-Standard-D",
+                language_code="gu-IN", name="gu-IN-Standard-D",
             )
             audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.LINEAR16)
             response = client.synthesize_speech(input=input_text, voice=voice, audio_config=audio_config)
@@ -152,7 +187,7 @@ elif page == "Transcription":
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_output:
             output_audio = temp_audio_output.name
 
-        st.write("Generating new audio using Google Text-to-Speech...")
+        st.write("Generating new audio using Text-to-Speech...")
         progress.progress(70)
         generate_speech(corrected_transcription, output_audio)
 
