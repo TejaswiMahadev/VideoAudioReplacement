@@ -19,7 +19,7 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "path-to-your-json-file"
 
 # Azure OpenAI API setup
 azure_api_key = 'API-KEY'
-azure_endpoint = 'ENDPOINT'
+azure_endpoint = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
 
 # Sidebar navigation
 st.sidebar.markdown(
