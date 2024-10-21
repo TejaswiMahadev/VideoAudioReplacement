@@ -61,10 +61,19 @@ elif page == "Transcription":
         mono_audio_filename = f"mono_audio_{unique_id}.wav"
         progress = st.progress(0)
         
-        # Download YouTube video using yt-dlp
+        # Download YouTube video using yt-dlp with cookies
         st.write("Downloading video from YouTube...")
         progress.progress(10)
-        ydl_opts = {'format': 'best', 'outtmpl': video_filename}
+        
+        # Path to the cookie file (update with the actual path)
+        cookie_path = "youtube_cookies.txt"  # Update this path if necessary
+        
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': video_filename,  # Set output filename
+            'cookiefile': cookie_path   # Use YouTube cookies for authentication
+        }
+        
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([youtube_url])
 
