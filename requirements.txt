@@ -1,11 +1,11 @@
 streamlit
 streamlit-option-menu
 moviepy
-requests
-yt-dlp
-aiofiles
 pydub
+librosa
+soundfile
+yt-dlp
+requests
 deepgram-sdk
-uuid
-azure-core
-azure-openai
+elevenlabs
+
