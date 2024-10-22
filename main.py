@@ -10,15 +10,9 @@ import tempfile
 import os
 import uuid
 import wave
-import requests
-import json
 
 # Setup Google Cloud credentials
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "qwiklabs-gcp-02-8c71d534349d-197589c68be5.json"
-
-# Azure OpenAI API setup
-azure_api_key = "API-KEY"
-azure_endpoint = "https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview"
 
 # Sidebar navigation
 st.sidebar.markdown(
@@ -46,7 +40,7 @@ with st.sidebar.expander("Menu", expanded=True):
 if page == "Homepage":
     st.title("Welcome to the Video Upload - Voice Replacement App")
     
-    st.write("""This app allows you to upload your own videos, extract and transcribe the audio, correct transcription errors using AI, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
+    st.write("""This app allows you to upload your own videos, extract and transcribe the audio, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
     
 elif page == "Transcription":
     st.title("Upload Video for Transcription and Voice Replacement")
@@ -114,32 +108,7 @@ elif page == "Transcription":
         transcription = transcribe_long_audio(mono_audio_filename)
         st.write(f"Transcription: {transcription}")
 
-        # Correct transcription using Azure OpenAI GPT-4
-        def correct_transcription_with_azure(transcript):
-            headers = {"Content-Type": "application/json", "api-key": azure_api_key}
-            data = {
-                "messages": [
-                    {"role": "system", "content": "You are a helpful assistant that corrects transcription errors."},
-                    {"role": "user", "content": f"Correct the following transcription: {transcript}"}
-                ]
-            }
-
-            response = requests.post(azure_endpoint, headers=headers, json=data)
-            if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-            else:
-                st.error(f"Failed to correct transcription. Error: {response.text}")
-                return None
-
-        st.write("Correcting transcription with Azure OpenAI GPT-4...")
-        progress.progress(60)
-        corrected_transcription = correct_transcription_with_azure(transcription)
-        if corrected_transcription:
-            st.write(corrected_transcription)
-        else:
-            st.error("Failed to generate corrected transcription.")
-
-        # Convert corrected transcription to speech using Google Text-to-Speech
+        # Convert generated transcription to speech using Google Text-to-Speech
         def generate_speech(text, output_audio_file):
             client = texttospeech.TextToSpeechClient()
             input_text = texttospeech.SynthesisInput(text=text)
@@ -156,8 +125,8 @@ elif page == "Transcription":
             output_audio = temp_audio_output.name
 
         st.write("Generating new audio using Text-to-Speech...")
-        progress.progress(70)
-        generate_speech(corrected_transcription, output_audio)
+        progress.progress(60)
+        generate_speech(transcription, output_audio)
 
         # Time-stretch the generated audio to match video duration
         def time_stretch_audio(input_audio_file, target_duration):
