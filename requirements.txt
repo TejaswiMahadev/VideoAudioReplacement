@@ -1,12 +1,13 @@
 streamlit
 streamlit-option-menu
 moviepy
+google-cloud-speech
+google-cloud-texttospeech
 pydub
 librosa
 soundfile
 yt-dlp
+uuid
+wave
 requests
-deepgram-sdk==2.12.0
-elevenlabs
-aiofiles
-
+google-api-python-client
