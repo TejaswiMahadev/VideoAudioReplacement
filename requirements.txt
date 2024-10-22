@@ -8,4 +8,4 @@ pydub
 deepgram-sdk
 uuid
 azure-core
-azure-ai-openai
+azure-openai
