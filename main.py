@@ -14,7 +14,7 @@ import requests
 import json
 
 # Setup Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "json-file-format"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "qwiklabs-gcp-02-8c71d534349d-197589c68be5.json"
 
 # Azure OpenAI API setup
 azure_api_key = 'API-KEY'
