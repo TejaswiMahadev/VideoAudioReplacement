@@ -80,10 +80,9 @@ def main():
     st.title("YouTube Audio Transcription and Video Audio Replacement")
 
     youtube_url = st.text_input("Enter YouTube URL")
-    video_file = st.file_uploader("Upload Video File", type=["mp4", "mov", "avi"])
 
     if st.button("Process"):
-        if youtube_url and video_file:
+        if youtube_url:
             with st.spinner("Downloading audio..."):
                 try:
                     audio_file_path = download_audio_from_youtube(youtube_url)
@@ -115,15 +114,12 @@ def main():
                     st.error(f"Error during text-to-speech conversion: {e}")
                     return
 
+            # Assuming that you have access to the YouTube video file through download
+            video_file = f"video_{uuid.uuid4()}.mp4"
             with st.spinner("Replacing audio in video..."):
                 try:
-                    # Save the uploaded video to a temporary file
-                    temp_video_path = f"uploaded_video_{uuid.uuid4()}.mp4"
-                    with open(temp_video_path, "wb") as temp_video_file:
-                        temp_video_file.write(video_file.read())
-
-                    # Replace the audio
-                    output_video_path = replace_audio_in_video(temp_video_path, output_audio_path)
+                    # Replace the audio in the video (video file from YouTube)
+                    output_video_path = replace_audio_in_video(video_file, output_audio_path)
                     st.success("Audio replaced successfully.")
 
                     st.video(output_video_path)
@@ -134,7 +130,7 @@ def main():
                 except Exception as e:
                     st.error(f"Error during audio replacement: {e}")
         else:
-            st.error("Please provide a valid YouTube URL and upload a video file.")
+            st.error("Please provide a valid YouTube URL.")
 
 if __name__ == "__main__":
     main()
