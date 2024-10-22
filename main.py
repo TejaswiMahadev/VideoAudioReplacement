@@ -1,134 +1,140 @@
-import streamlit as st
-from streamlit_option_menu import option_menu
-from moviepy.editor import VideoFileClip
-import os
+import yt_dlp
 import uuid
-import tempfile
-import requests
-import yt_dlp as youtube_dl
 import asyncio
+import os
+import moviepy.editor as mp
 from deepgram import Deepgram
-import aiofiles
-from pydub import AudioSegment  # Make sure you have pydub installed
+import streamlit as st
+from elevenlabs import ElevenLabs, Voice, VoiceSettings
 
-# API Keys
-DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
-AZURE_API_KEY = 'YOUR_AZURE_API_KEY'
-AZURE_ENDPOINT = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
-ELEVEN_LABS_API_KEY = 'YOUR_ELEVEN_LABS_API_KEY'
+# Deepgram and ElevenLabs API keys
+DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'  # Replace with your actual Deepgram API key
+ELEVENLABS_API_KEY = 'YOUR_ELEVENLABS_API_KEY'  # Replace with your actual Eleven Labs API key
 
-# Initialize Deepgram client
-dg_client = Deepgram(DEEPGRAM_API_KEY)
+# Function to download audio from YouTube
+def download_audio_from_youtube(url):
+    unique_filename = f"audio_{uuid.uuid4()}.mp3"
+    ydl_opts = {
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'outtmpl': unique_filename,
+        'verbose': True,
+        'postprocessors': [],  # You can specify postprocessors if needed
+        'cookiefile': 'youtube_cookies.txt'  # Optional: Path to your cookies file
+    }
 
-# Sidebar navigation
-st.sidebar.header("NAVIGATION")
-with st.sidebar.expander("Menu", expanded=True):
-    page = option_menu(menu_title="Navigation", options=["Homepage", "Transcription"], icons=["house", "person"], menu_icon="cast", default_index=0)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
 
-if page == "Homepage":
-    st.title("Welcome to the YouTube Video Voice Replacement App")
+    if not os.path.exists(unique_filename):
+        raise FileNotFoundError(f"Downloaded audio file '{unique_filename}' not found.")
 
-elif page == "Transcription":
-    st.title("YouTube Video Voice Replacement with AI")
+    return unique_filename
 
-    youtube_url = st.text_input("Enter YouTube Video URL")
+# Asynchronous function to transcribe audio using Deepgram
+async def transcribe_audio_deepgram(audio_file, deepgram_api_key):
+    deepgram = Deepgram(deepgram_api_key)
 
-    if youtube_url:
-        unique_id = str(uuid.uuid4())
-        video_filename = f"downloaded_video_{unique_id}.mp4"
-        audio_filename = f"audio_{unique_id}.wav"
-        mono_audio_filename = f"mono_audio_{unique_id}.wav"
-        progress = st.progress(0)
+    with open(audio_file, 'rb') as audio:
+        source = {'buffer': audio, 'mimetype': 'audio/mp3'}
+        response = await deepgram.transcription.prerecorded(source, {'punctuate': True})
+        transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
+    
+    return transcript
 
-        # Download YouTube video
-        st.write("Downloading video from YouTube...")
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': video_filename,
-            'cookiefile': 'youtube_cookies.txt'  # Ensure you provide the correct path to your cookie file
-        }
-        try:
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([youtube_url])
-        except Exception as e:
-            st.error(f"Failed to download video. Error: {e}")
-            st.stop()
+# Function to convert text to audio using Eleven Labs
+def convert_text_to_audio_elevenlabs(transcript, output_audio='output_audio.mp3'):
+    client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
-        # Extract audio from video
-        st.write("Extracting audio...")
-        video_clip = VideoFileClip(video_filename)
-        video_clip.audio.write_audiofile(audio_filename)
+    voice = Voice(
+        voice_id="YOUR_VOICE_ID",  # Replace with your voice ID
+        settings=VoiceSettings(
+            stability=0,
+            similarity_boost=0.75
+        )
+    )
 
-        # Convert stereo audio to mono
-        def convert_stereo_to_mono(input_audio, output_audio):
-            audio = AudioSegment.from_wav(input_audio)
-            mono_audio = audio.set_channels(1)
-            mono_audio.export(output_audio, format="wav")
+    audio_generator = client.generate(
+        text=transcript,
+        voice=voice
+    )
 
-        convert_stereo_to_mono(audio_filename, mono_audio_filename)
+    audio_bytes = b"".join(audio_generator)
+    with open(output_audio, 'wb') as f:
+        f.write(audio_bytes)
 
-        # Transcribe using Deepgram
-        async def transcribe_audio_with_deepgram(audio_file):
-            async with aiofiles.open(audio_file, 'rb') as afp:
-                audio_data = await afp.read()
+    return output_audio
 
-            source = {'buffer': audio_data, 'mimetype': 'audio/wav'}
-            response = await dg_client.transcription.prerecorded(source, {'punctuate': True})
-            transcription = response['results']['channels'][0]['alternatives'][0]['transcript']
-            return transcription
+# Function to replace audio in a video
+def replace_audio_in_video(video_file, audio_file, output_video='output_video.mp4'):
+    video_clip = mp.VideoFileClip(video_file)
+    audio_clip = mp.AudioFileClip(audio_file)
 
-        st.write("Transcribing audio...")
-        transcription = asyncio.run(transcribe_audio_with_deepgram(mono_audio_filename))
-        st.write(f"Transcription: {transcription}")
+    # Set the new audio for the video
+    video_clip = video_clip.set_audio(audio_clip)
+    video_clip.write_videofile(output_video, codec='libx264', audio_codec='aac')
 
-        # Correct transcription using Azure OpenAI GPT-4
-        def correct_transcription_with_azure(transcript):
-            headers = {"Content-Type": "application/json", "api-key": AZURE_API_KEY}
-            data = {
-                "messages": [
-                    {"role": "system", "content": "You are a helpful assistant that corrects transcription errors."},
-                    {"role": "user", "content": f"Correct the following transcription: {transcript}"}
-                ]
-            }
+    return output_video
 
-            response = requests.post(AZURE_ENDPOINT, headers=headers, json=data)
-            if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-            else:
-                st.error(f"Failed to correct transcription. Error: {response.text}")
-                return None
+# Streamlit UI
+def main():
+    st.title("YouTube Audio Transcription and Video Audio Replacement")
 
-        st.write("Correcting transcription with Azure OpenAI GPT-4...")
-        corrected_transcription = correct_transcription_with_azure(transcription)
-        if corrected_transcription:
-            st.write(f"Corrected Transcription: {corrected_transcription}")
+    youtube_url = st.text_input("Enter YouTube URL")
+    video_file = st.file_uploader("Upload Video File", type=["mp4", "mov", "avi"])
+
+    if st.button("Process"):
+        if youtube_url and video_file:
+            with st.spinner("Downloading audio..."):
+                try:
+                    audio_file_path = download_audio_from_youtube(youtube_url)
+                    st.success("Audio downloaded successfully.")
+                except Exception as e:
+                    st.error(f"Error downloading audio: {e}")
+                    return
+
+            with st.spinner("Transcribing audio..."):
+                try:
+                    transcript = asyncio.run(transcribe_audio_deepgram(audio_file_path, DEEPGRAM_API_KEY))
+                    st.success("Transcription complete.")
+                    st.text_area("Transcript", transcript, height=200)
+                except Exception as e:
+                    st.error(f"Error during transcription: {e}")
+                    return
+
+            with st.spinner("Converting transcript to speech..."):
+                try:
+                    output_audio_path = convert_text_to_audio_elevenlabs(transcript)
+                    st.success("Text-to-speech conversion complete.")
+
+                    st.audio(output_audio_path)
+
+                    with open(output_audio_path, 'rb') as f:
+                        st.download_button(label="Download Generated Audio", data=f, file_name=output_audio_path, mime='audio/mp3')
+
+                except Exception as e:
+                    st.error(f"Error during text-to-speech conversion: {e}")
+                    return
+
+            with st.spinner("Replacing audio in video..."):
+                try:
+                    # Save the uploaded video to a temporary file
+                    temp_video_path = f"uploaded_video_{uuid.uuid4()}.mp4"
+                    with open(temp_video_path, "wb") as temp_video_file:
+                        temp_video_file.write(video_file.read())
+
+                    # Replace the audio
+                    output_video_path = replace_audio_in_video(temp_video_path, output_audio_path)
+                    st.success("Audio replaced successfully.")
+
+                    st.video(output_video_path)
+
+                    with open(output_video_path, 'rb') as f:
+                        st.download_button(label="Download Final Video", data=f, file_name=output_video_path, mime='video/mp4')
+
+                except Exception as e:
+                    st.error(f"Error during audio replacement: {e}")
         else:
-            st.error("Failed to generate corrected transcription.")
+            st.error("Please provide a valid YouTube URL and upload a video file.")
 
-        # Generate speech using Eleven Labs API
-        def generate_speech_eleven_labs(text, output_audio_file):
-            url = 'https://api.elevenlabs.io/v1/text-to-speech/voice_id'
-            headers = {
-                'accept': 'audio/mpeg',
-                'xi-api-key': ELEVEN_LABS_API_KEY,
-                'Content-Type': 'application/json',
-            }
-            payload = {
-                'text': text,
-                'voice_settings': {'stability': 0.75, 'similarity_boost': 0.75}
-            }
-            response = requests.post(url, headers=headers, json=payload)
-            if response.status_code == 200:
-                with open(output_audio_file, 'wb') as f:
-                    f.write(response.content)
-                st.success("Generated speech successfully!")
-            else:
-                st.error(f"Error generating speech: {response.text}")
-
-        output_audio_file = f"generated_audio_{unique_id}.mp3"
-        generate_speech_eleven_labs(corrected_transcription, output_audio_file)
-
-        # (Optional) Add functionality to play the generated audio or download it
-        with open(output_audio_file, "rb") as audio_file:
-            audio_bytes = audio_file.read()
-            st.audio(audio_bytes, format='audio/mp3')
+if __name__ == "__main__":
+    main()
