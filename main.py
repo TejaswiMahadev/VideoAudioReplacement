@@ -70,7 +70,7 @@ elif page == "Transcription":
         ydl_opts = {
             'format': 'best',
             'outtmpl': video_filename,
-            'cookiefile': 'path/to/your/cookies.txt'  # Replace with the actual path to your cookies file
+            'cookiefile': 'youtube_cookies.txt'  # Replace with the actual path to your cookies file
         }
 
         try:
