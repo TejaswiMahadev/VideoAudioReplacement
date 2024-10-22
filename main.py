@@ -13,7 +13,7 @@ import aiofiles
 # API Keys
 DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
 AZURE_API_KEY = 'YOUR_AZURE_API_KEY'
-AZURE_ENDPOINT = 'YOUR_AZURE_ENDPOINT'
+AZURE_ENDPOINT = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
 ELEVEN_LABS_API_KEY = 'YOUR_ELEVEN_LABS_API_KEY'
 
 # Initialize Deepgram client
