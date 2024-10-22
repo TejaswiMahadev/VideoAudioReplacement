@@ -11,25 +11,6 @@ from elevenlabs import ElevenLabs, Voice, VoiceSettings
 DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'  # Replace with your actual Deepgram API key
 ELEVENLABS_API_KEY = 'YOUR_ELEVENLABS_API_KEY'  # Replace with your actual Eleven Labs API key
 
-# Function to download audio from YouTube
-def download_audio_from_youtube(url):
-    unique_filename = f"audio_{uuid.uuid4()}.mp3"
-    ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
-        'outtmpl': unique_filename,
-        'verbose': True,
-        'postprocessors': [],  # You can specify postprocessors if needed
-        'cookiefile': 'youtube_cookies.txt'  # Optional: Path to your cookies file
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-
-    if not os.path.exists(unique_filename):
-        raise FileNotFoundError(f"Downloaded audio file '{unique_filename}' not found.")
-
-    return unique_filename
-
 # Asynchronous function to transcribe audio using Deepgram
 async def transcribe_audio_deepgram(audio_file, deepgram_api_key):
     deepgram = Deepgram(deepgram_api_key)
@@ -77,23 +58,33 @@ def replace_audio_in_video(video_file, audio_file, output_video='output_video.mp
 
 # Streamlit UI
 def main():
-    st.title("YouTube Audio Transcription and Video Audio Replacement")
+    st.title("Video Upload - Audio Transcription and Replacement")
 
-    youtube_url = st.text_input("Enter YouTube URL")
+    video_file = st.file_uploader("Upload Video File", type=["mp4", "mov", "avi"])
 
     if st.button("Process"):
-        if youtube_url:
-            with st.spinner("Downloading audio..."):
+        if video_file:
+            with st.spinner("Saving uploaded video..."):
+                # Save the uploaded video to a temporary file
+                video_filename = f"uploaded_video_{uuid.uuid4()}.mp4"
+                with open(video_filename, "wb") as f:
+                    f.write(video_file.read())
+
+            with st.spinner("Extracting audio from video..."):
                 try:
-                    audio_file_path = download_audio_from_youtube(youtube_url)
-                    st.success("Audio downloaded successfully.")
+                    # Extract audio from the uploaded video
+                    video_clip = mp.VideoFileClip(video_filename)
+                    audio_filename = f"extracted_audio_{uuid.uuid4()}.mp3"
+                    video_clip.audio.write_audiofile(audio_filename)
+                    st.success("Audio extracted successfully.")
                 except Exception as e:
-                    st.error(f"Error downloading audio: {e}")
+                    st.error(f"Error extracting audio: {e}")
                     return
 
             with st.spinner("Transcribing audio..."):
                 try:
-                    transcript = asyncio.run(transcribe_audio_deepgram(audio_file_path, DEEPGRAM_API_KEY))
+                    # Transcribe the extracted audio using Deepgram
+                    transcript = asyncio.run(transcribe_audio_deepgram(audio_filename, DEEPGRAM_API_KEY))
                     st.success("Transcription complete.")
                     st.text_area("Transcript", transcript, height=200)
                 except Exception as e:
@@ -102,6 +93,7 @@ def main():
 
             with st.spinner("Converting transcript to speech..."):
                 try:
+                    # Convert the transcript back to speech using ElevenLabs
                     output_audio_path = convert_text_to_audio_elevenlabs(transcript)
                     st.success("Text-to-speech conversion complete.")
 
@@ -109,17 +101,14 @@ def main():
 
                     with open(output_audio_path, 'rb') as f:
                         st.download_button(label="Download Generated Audio", data=f, file_name=output_audio_path, mime='audio/mp3')
-
                 except Exception as e:
                     st.error(f"Error during text-to-speech conversion: {e}")
                     return
 
-            # Assuming that you have access to the YouTube video file through download
-            video_file = f"video_{uuid.uuid4()}.mp4"
             with st.spinner("Replacing audio in video..."):
                 try:
-                    # Replace the audio in the video (video file from YouTube)
-                    output_video_path = replace_audio_in_video(video_file, output_audio_path)
+                    # Replace the audio in the video with the newly generated audio
+                    output_video_path = replace_audio_in_video(video_filename, output_audio_path)
                     st.success("Audio replaced successfully.")
 
                     st.video(output_video_path)
@@ -130,7 +119,7 @@ def main():
                 except Exception as e:
                     st.error(f"Error during audio replacement: {e}")
         else:
-            st.error("Please provide a valid YouTube URL.")
+            st.error("Please upload a video file.")
 
 if __name__ == "__main__":
     main()
