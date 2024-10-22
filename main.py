@@ -7,6 +7,7 @@ from pydub import AudioSegment
 import librosa
 import soundfile as sf
 import tempfile
+
 import os
 import yt_dlp as youtube_dl
 import uuid
@@ -15,14 +16,11 @@ import requests
 import json
 
 # Setup Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "qwiklabs-gcp-03-0cc652e64bf6-44cb57ce657c.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "qwiklabs-gcp-00-246c7a6d0bce-421b4a459015.json"
 
 # Azure OpenAI API setup
-azure_api_key = 'api-key'
+azure_api_key = 'azure-api-key'
 azure_endpoint = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
-
-# YouTube Data API v3 key
-YOUTUBE_API_KEY = 'api-key'
 
 # Sidebar navigation
 st.sidebar.markdown(
@@ -49,41 +47,38 @@ with st.sidebar.expander("Menu", expanded=True):
 
 if page == "Homepage":
     st.title("Welcome to the YouTube Video Voice Replacement App")
+    
     st.write("""This app allows you to download YouTube videos, extract and transcribe the audio, correct transcription errors using AI, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
 
 elif page == "Transcription":
     st.title("YouTube Video Voice Replacement with AI")
 
-    # Step 1: Get YouTube video details using the YouTube Data API v3
     youtube_url = st.text_input("Enter YouTube Video URL")
 
     if youtube_url:
-        video_id = youtube_url.split('v=')[-1]
-        youtube_api_url = f"https://www.googleapis.com/youtube/v3/videos?id={video_id}&key={YOUTUBE_API_KEY}&part=snippet"
-
-        response = requests.get(youtube_api_url)
-        if response.status_code == 200:
-            video_info = response.json()
-            if 'items' in video_info and len(video_info['items']) > 0:
-                video_title = video_info['items'][0]['snippet']['title']
-                st.write(f"Video Title: {video_title}")
-            else:
-                st.write("Video not found.")
-        else:
-            st.error(f"Failed to fetch video details. Status code: {response.status_code}")
-
         unique_id = str(uuid.uuid4())
         video_filename = f"downloaded_video_{unique_id}.mp4"
         audio_filename = f"audio_{unique_id}.wav"
         mono_audio_filename = f"mono_audio_{unique_id}.wav"
         progress = st.progress(0)
-
-        # Step 2: Download YouTube video using yt-dlp
+        
+        # Download YouTube video using yt-dlp with cookies
         st.write("Downloading video from YouTube...")
         progress.progress(10)
-        ydl_opts = {'format': 'best', 'outtmpl': video_filename}
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([youtube_url])
+        
+        # Provide path to cookies.txt from logged-in YouTube session
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': video_filename,
+            'cookiefile': 'path/to/your/cookies.txt'  # Replace with the actual path to your cookies file
+        }
+
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+        except youtube_dl.utils.DownloadError as e:
+            st.error(f"Failed to download video. Error: {str(e)}")
+            st.stop()
 
         # Extract audio from video
         st.write("Extracting audio...")
@@ -210,5 +205,8 @@ elif page == "Transcription":
             st.download_button(
                 label="Download Final Video",
                 data=video_bytes,
-                file_name=final_video_file
+                file_name=final_video_file,
+                mime="video/mp4"
             )
+
+        st.write(f"Final video saved: {final_video_file}")
