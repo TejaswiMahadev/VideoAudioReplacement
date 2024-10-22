@@ -9,7 +9,7 @@ import yt_dlp as youtube_dl
 import asyncio
 from deepgram import Deepgram
 import aiofiles
-from youtube_cookies import load_cookies  # Import for loading YouTube cookies
+from pydub import AudioSegment  # Make sure you have pydub installed
 
 # API Keys
 DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
@@ -19,9 +19,6 @@ ELEVEN_LABS_API_KEY = 'YOUR_ELEVEN_LABS_API_KEY'
 
 # Initialize Deepgram client
 dg_client = Deepgram(DEEPGRAM_API_KEY)
-
-# Load YouTube cookies
-cookies = load_cookies('path/to/your/youtube_cookies.txt')  # Provide the correct path to your YouTube cookies file
 
 # Sidebar navigation
 st.sidebar.header("NAVIGATION")
@@ -48,7 +45,7 @@ elif page == "Transcription":
         ydl_opts = {
             'format': 'best',
             'outtmpl': video_filename,
-            'cookiefile': 'path/to/your/youtube_cookies.txt'  # Ensure cookies are used for captcha
+            'cookiefile': 'youtube_cookies.txt'  # Ensure you provide the correct path to your cookie file
         }
         try:
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
