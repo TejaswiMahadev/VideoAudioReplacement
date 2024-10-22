@@ -1,54 +1,31 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
-from moviepy.editor import VideoFileClip, AudioFileClip
-from google.cloud import speech
-from google.cloud import texttospeech
-from pydub import AudioSegment
-import librosa
-import soundfile as sf
-import tempfile
-
+from moviepy.editor import VideoFileClip
 import os
-import yt_dlp as youtube_dl
 import uuid
-import wave
+import tempfile
 import requests
-import json
+import yt_dlp as youtube_dl
+import asyncio
+from deepgram import Deepgram
+import aiofiles
 
-# Setup Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "qwiklabs-gcp-00-246c7a6d0bce-421b4a459015.json"
+# API Keys
+DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
+AZURE_API_KEY = 'YOUR_AZURE_API_KEY'
+AZURE_ENDPOINT = 'YOUR_AZURE_ENDPOINT'
+ELEVEN_LABS_API_KEY = 'YOUR_ELEVEN_LABS_API_KEY'
 
-# Azure OpenAI API setup
-azure_api_key = 'azure-api-key'
-azure_endpoint = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
+# Initialize Deepgram client
+dg_client = Deepgram(DEEPGRAM_API_KEY)
 
 # Sidebar navigation
-st.sidebar.markdown(
-    """
-    <style>
-    .sidebar .sidebar-content {
-        width: 300px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-st.sidebar.markdown(
-    """
-    <h1 style='font-size: 2em;'>
-        <img src="https://img.icons8.com/?size=100&id=szxM3fi4e37N&format=png&color=000000" alt="Yapp Icon" style="vertical-align: middle;"> YAPP!
-    </h1>
-    """,
-    unsafe_allow_html=True
-)
 st.sidebar.header("NAVIGATION")
 with st.sidebar.expander("Menu", expanded=True):
     page = option_menu(menu_title="Navigation", options=["Homepage", "Transcription"], icons=["house", "person"], menu_icon="cast", default_index=0)
 
 if page == "Homepage":
     st.title("Welcome to the YouTube Video Voice Replacement App")
-    
-    st.write("""This app allows you to download YouTube videos, extract and transcribe the audio, correct transcription errors using AI, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
 
 elif page == "Transcription":
     st.title("YouTube Video Voice Replacement with AI")
@@ -61,78 +38,43 @@ elif page == "Transcription":
         audio_filename = f"audio_{unique_id}.wav"
         mono_audio_filename = f"mono_audio_{unique_id}.wav"
         progress = st.progress(0)
-        
-        # Download YouTube video using yt-dlp with cookies
-        st.write("Downloading video from YouTube...")
-        progress.progress(10)
-        
-        # Provide path to cookies.txt from logged-in YouTube session
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': video_filename,
-            'cookiefile': 'youtube_cookies.txt'  # Replace with the actual path to your cookies file
-        }
 
-        try:
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([youtube_url])
-        except youtube_dl.utils.DownloadError as e:
-            st.error(f"Failed to download video. Error: {str(e)}")
-            st.stop()
+        # Download YouTube video
+        st.write("Downloading video from YouTube...")
+        ydl_opts = {'format': 'best', 'outtmpl': video_filename}
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([youtube_url])
 
         # Extract audio from video
         st.write("Extracting audio...")
-        progress.progress(20)
         video_clip = VideoFileClip(video_filename)
         video_clip.audio.write_audiofile(audio_filename)
 
-        # Convert stereo audio to mono using pydub
+        # Convert stereo audio to mono
         def convert_stereo_to_mono(input_audio, output_audio):
             audio = AudioSegment.from_wav(input_audio)
             mono_audio = audio.set_channels(1)
             mono_audio.export(output_audio, format="wav")
 
-        st.write("Converting audio to mono...")
-        progress.progress(30)
         convert_stereo_to_mono(audio_filename, mono_audio_filename)
 
-        def get_audio_sample_rate(audio_file):
-            with wave.open(audio_file, 'rb') as wav_file:
-                return wav_file.getframerate()
+        # Transcribe using Deepgram
+        async def transcribe_audio_with_deepgram(audio_file):
+            async with aiofiles.open(audio_file, 'rb') as afp:
+                audio_data = await afp.read()
 
-        audio_sample_rate = get_audio_sample_rate(mono_audio_filename)
-
-        # Transcribe large audio file using long_running_recognize
-        def transcribe_long_audio(audio_file):
-            client = speech.SpeechClient()
-            with open(audio_file, "rb") as f:
-                audio_data = f.read()
-
-            audio = speech.RecognitionAudio(content=audio_data)
-            config = speech.RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=audio_sample_rate,
-                language_code="en-US",
-                enable_automatic_punctuation=True,
-            )
-
-            operation = client.long_running_recognize(config=config, audio=audio)
-            st.write("Transcribing audio... this may take a few minutes.")
-            response = operation.result(timeout=600)
-
-            transcription = ""
-            for result in response.results:
-                transcription += result.alternatives[0].transcript + " "
+            source = {'buffer': audio_data, 'mimetype': 'audio/wav'}
+            response = await dg_client.transcription.prerecorded(source, {'punctuate': True})
+            transcription = response['results']['channels'][0]['alternatives'][0]['transcript']
             return transcription
 
-        st.write("Transcribing audio using long-running recognition...")
-        progress.progress(50)
-        transcription = transcribe_long_audio(mono_audio_filename)
+        st.write("Transcribing audio...")
+        transcription = asyncio.run(transcribe_audio_with_deepgram(mono_audio_filename))
         st.write(f"Transcription: {transcription}")
 
         # Correct transcription using Azure OpenAI GPT-4
         def correct_transcription_with_azure(transcript):
-            headers = {"Content-Type": "application/json", "api-key": azure_api_key}
+            headers = {"Content-Type": "application/json", "api-key": AZURE_API_KEY}
             data = {
                 "messages": [
                     {"role": "system", "content": "You are a helpful assistant that corrects transcription errors."},
@@ -140,7 +82,7 @@ elif page == "Transcription":
                 ]
             }
 
-            response = requests.post(azure_endpoint, headers=headers, json=data)
+            response = requests.post(AZURE_ENDPOINT, headers=headers, json=data)
             if response.status_code == 200:
                 return response.json()["choices"][0]["message"]["content"]
             else:
@@ -148,65 +90,36 @@ elif page == "Transcription":
                 return None
 
         st.write("Correcting transcription with Azure OpenAI GPT-4...")
-        progress.progress(60)
         corrected_transcription = correct_transcription_with_azure(transcription)
         if corrected_transcription:
-            st.write(corrected_transcription)
+            st.write(f"Corrected Transcription: {corrected_transcription}")
         else:
             st.error("Failed to generate corrected transcription.")
 
-        # Convert corrected transcription to speech using Google Text-to-Speech
-        def generate_speech(text, output_audio_file):
-            client = texttospeech.TextToSpeechClient()
-            input_text = texttospeech.SynthesisInput(text=text)
-            voice = texttospeech.VoiceSelectionParams(
-                language_code="gu-IN", name="gu-IN-Standard-D",
-            )
-            audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.LINEAR16)
-            response = client.synthesize_speech(input=input_text, voice=voice, audio_config=audio_config)
+        # Generate speech using Eleven Labs API
+        def generate_speech_eleven_labs(text, output_audio_file):
+            url = 'https://api.elevenlabs.io/v1/text-to-speech/voice_id'
+            headers = {
+                'accept': 'audio/mpeg',
+                'xi-api-key': ELEVEN_LABS_API_KEY,
+                'Content-Type': 'application/json',
+            }
+            payload = {
+                'text': text,
+                'voice_settings': {'stability': 0.75, 'similarity_boost': 0.75}
+            }
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code == 200:
+                with open(output_audio_file, 'wb') as f:
+                    f.write(response.content)
+                st.success("Generated speech successfully!")
+            else:
+                st.error(f"Error generating speech: {response.text}")
 
-            with open(output_audio_file, "wb") as out:
-                out.write(response.audio_content)
+        output_audio_file = f"generated_audio_{unique_id}.mp3"
+        generate_speech_eleven_labs(corrected_transcription, output_audio_file)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio_output:
-            output_audio = temp_audio_output.name
-
-        st.write("Generating new audio using Text-to-Speech...")
-        progress.progress(70)
-        generate_speech(corrected_transcription, output_audio)
-
-        # Time-stretch the generated audio to match video duration
-        def time_stretch_audio(input_audio_file, target_duration):
-            audio_data, sample_rate = librosa.load(input_audio_file, sr=None)
-            current_duration = librosa.get_duration(y=audio_data, sr=sample_rate)
-            stretch_factor = target_duration / current_duration
-            stretched_audio = librosa.effects.time_stretch(audio_data, rate=stretch_factor)
-            output_audio_file = f"stretched_{os.path.basename(input_audio_file)}"
-            sf.write(output_audio_file, stretched_audio, sample_rate)
-            return output_audio_file
-
-        video_duration = video_clip.duration
-        st.write("Stretching audio to match video duration...")
-        progress.progress(80)
-        stretched_audio_file = time_stretch_audio(output_audio, video_duration)
-
-        # Replace original audio in the video with the stretched audio
-        new_audio_clip = AudioFileClip(stretched_audio_file)
-        video_with_stretched_audio = video_clip.set_audio(new_audio_clip)
-
-        # Save the final video
-        st.write("Saving final video...")
-        final_video_file = f"final_video_{unique_id}.mp4"
-        video_with_stretched_audio.write_videofile(final_video_file)
-        progress.progress(100)
-
-        with open(final_video_file, "rb") as video_file:
-            video_bytes = video_file.read()
-            st.download_button(
-                label="Download Final Video",
-                data=video_bytes,
-                file_name=final_video_file,
-                mime="video/mp4"
-            )
-
-        st.write(f"Final video saved: {final_video_file}")
+        # (Optional) Add functionality to play the generated audio or download it
+        with open(output_audio_file, "rb") as audio_file:
+            audio_bytes = audio_file.read()
+            st.audio(audio_bytes, format='audio/mp3')
