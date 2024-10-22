@@ -15,11 +15,14 @@ import requests
 import json
 
 # Setup Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "path-to-your-json-file"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "services-account-json-file"
 
 # Azure OpenAI API setup
-azure_api_key = 'API-KEY'
+azure_api_key = 'api-key'
 azure_endpoint = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
+
+# YouTube Data API v3 key
+YOUTUBE_API_KEY = 'api-key'
 
 # Sidebar navigation
 st.sidebar.markdown(
@@ -46,56 +49,42 @@ with st.sidebar.expander("Menu", expanded=True):
 
 if page == "Homepage":
     st.title("Welcome to the YouTube Video Voice Replacement App")
-    
     st.write("""This app allows you to download YouTube videos, extract and transcribe the audio, correct transcription errors using AI, and replace the audio with a newly generated voice using Google Text-to-Speech.""")
 
 elif page == "Transcription":
     st.title("YouTube Video Voice Replacement with AI")
 
+    # Step 1: Get YouTube video details using the YouTube Data API v3
     youtube_url = st.text_input("Enter YouTube Video URL")
 
     if youtube_url:
+        video_id = youtube_url.split('v=')[-1]
+        youtube_api_url = f"https://www.googleapis.com/youtube/v3/videos?id={video_id}&key={YOUTUBE_API_KEY}&part=snippet"
+
+        response = requests.get(youtube_api_url)
+        if response.status_code == 200:
+            video_info = response.json()
+            if 'items' in video_info and len(video_info['items']) > 0:
+                video_title = video_info['items'][0]['snippet']['title']
+                st.write(f"Video Title: {video_title}")
+            else:
+                st.write("Video not found.")
+        else:
+            st.error(f"Failed to fetch video details. Status code: {response.status_code}")
+
         unique_id = str(uuid.uuid4())
         video_filename = f"downloaded_video_{unique_id}.mp4"
         audio_filename = f"audio_{unique_id}.wav"
         mono_audio_filename = f"mono_audio_{unique_id}.wav"
         progress = st.progress(0)
-        
-        # Function to list available formats
-        def list_formats(youtube_url):
-            with youtube_dl.YoutubeDL() as ydl:
-                info_dict = ydl.extract_info(youtube_url, download=False)
-                formats = info_dict.get('formats', None)
-                format_list = []
-                if formats:
-                    st.write("Available formats:")
-                    for f in formats:
-                        st.write(f"Format code: {f['format_id']}, Resolution: {f.get('height')}p, Extension: {f['ext']}, Note: {f.get('format_note')}")
-                        format_list.append(f['format_id'])
-                return format_list
-        
-        st.write("Listing available formats for the video...")
-        available_formats = list_formats(youtube_url)
-        
-        # Let the user select a format
-        selected_format = st.selectbox("Select a format to download:", available_formats)
-        
-        # Set download options for the selected format
-        ydl_opts = {
-            'format': selected_format,             # Select the format chosen by the user
-            'outtmpl': video_filename,             # Output filename template
-            'noplaylist': True,                    # Ensure it only downloads a single video
-        }
-        
-        # Download YouTube video using yt-dlp
+
+        # Step 2: Download YouTube video using yt-dlp
         st.write("Downloading video from YouTube...")
         progress.progress(10)
-        try:
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([youtube_url])
-        except youtube_dl.DownloadError as e:
-            st.error(f"Download error: {str(e)}")
-        
+        ydl_opts = {'format': 'best', 'outtmpl': video_filename}
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([youtube_url])
+
         # Extract audio from video
         st.write("Extracting audio...")
         progress.progress(20)
@@ -218,6 +207,8 @@ elif page == "Transcription":
 
         with open(final_video_file, "rb") as video_file:
             video_bytes = video_file.read()
-            st.video(video_bytes)
-
-        st.success("Process completed successfully!")
+            st.download_button(
+                label="Download Final Video",
+                data=video_bytes,
+                file_name=final_video_file
+            )
