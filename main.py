@@ -9,6 +9,7 @@ import yt_dlp as youtube_dl
 import asyncio
 from deepgram import Deepgram
 import aiofiles
+from youtube_cookies import load_cookies  # Import for loading YouTube cookies
 
 # API Keys
 DEEPGRAM_API_KEY = 'YOUR_DEEPGRAM_API_KEY'
@@ -18,6 +19,9 @@ ELEVEN_LABS_API_KEY = 'YOUR_ELEVEN_LABS_API_KEY'
 
 # Initialize Deepgram client
 dg_client = Deepgram(DEEPGRAM_API_KEY)
+
+# Load YouTube cookies
+cookies = load_cookies('path/to/your/youtube_cookies.txt')  # Provide the correct path to your YouTube cookies file
 
 # Sidebar navigation
 st.sidebar.header("NAVIGATION")
@@ -41,9 +45,17 @@ elif page == "Transcription":
 
         # Download YouTube video
         st.write("Downloading video from YouTube...")
-        ydl_opts = {'format': 'best', 'outtmpl': video_filename}
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([youtube_url])
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': video_filename,
+            'cookiefile': 'path/to/your/youtube_cookies.txt'  # Ensure cookies are used for captcha
+        }
+        try:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+        except Exception as e:
+            st.error(f"Failed to download video. Error: {e}")
+            st.stop()
 
         # Extract audio from video
         st.write("Extracting audio...")
