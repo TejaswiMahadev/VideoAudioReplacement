@@ -17,8 +17,8 @@ import json
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "qwiklabs-gcp-02-8c71d534349d-197589c68be5.json"
 
 # Azure OpenAI API setup
-azure_api_key = 'API-KEY'
-azure_endpoint = 'https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview'
+azure_api_key = "API-KEY"
+azure_endpoint = "https://internshala.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview"
 
 # Sidebar navigation
 st.sidebar.markdown(
